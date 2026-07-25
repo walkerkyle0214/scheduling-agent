@@ -17,6 +17,7 @@ if [[ ! -f .env ]]; then
 fi
 set -a; source .env; set +a
 PORT="${PORT:-8001}"
+ROOT="$(pwd)"
 
 # --- venv (create + install deps on first run) ----------------------------
 if [[ ! -d .venv ]]; then
@@ -30,9 +31,10 @@ lsof -ti:"$PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
 pkill -f "ngrok http" 2>/dev/null || true
 sleep 1
 
-# --- backend --------------------------------------------------------------
+# --- backend (runs from backend/ so `import crm` / `import db` resolve) -----
 echo "Starting backend on :$PORT ..."
-./.venv/bin/uvicorn main:app --port "$PORT" --reload >/tmp/summitair_backend.log 2>&1 &
+( cd backend && exec "$ROOT/.venv/bin/uvicorn" main:app --port "$PORT" --reload ) \
+  >/tmp/summitair_backend.log 2>&1 &
 BACKEND_PID=$!
 
 # --- ngrok ----------------------------------------------------------------

@@ -28,6 +28,11 @@ import time
 
 import requests
 
+# Make sibling test modules and the agent/ folder importable regardless of cwd.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)                                     # tests/  (stress_test)
+sys.path.insert(0, os.path.join(_HERE, os.pardir, "agent"))   # agent/  (create_assistant)
+
 from stress_test import chat, _require, LOCAL_BASE, VAPI_BASE
 from create_assistant import build_payload, CALLER_CONTEXT, PROMPT_PATH
 

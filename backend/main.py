@@ -26,7 +26,8 @@ import crm
 
 app = FastAPI(title="Summit Air Agent Backend")
 backend = crm.get_backend()
-DASHBOARD_HTML = Path(__file__).with_name("dashboard.html")
+# dashboard.html lives in the sibling dashboard/ folder (repo_root/dashboard/).
+DASHBOARD_HTML = Path(__file__).resolve().parent.parent / "dashboard" / "dashboard.html"
 
 TOOL_HANDLERS = {
     "lookup_customer": backend.lookup_customer,
