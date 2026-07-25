@@ -237,26 +237,39 @@ def run_one(sc, api_key, assistant_id, verbose):
     return (fail is None), fail, apologies, questions
 
 
-def run_suite(api_key, assistant_id, scenarios, verbose=False):
-    passed = 0
+def run_suite(api_key, assistant_id, scenarios, verbose=False, runs=1):
+    total_pass = 0
     tot_apol = 0
     tot_q = 0
-    print(f"\n  {'scenario':<32} {'result':<10} apolog  q")
-    print("  " + "-" * 58)
+    suffix = f"  (each scenario x{runs})" if runs > 1 else ""
+    print(f"\n  {'scenario':<32} {'passed':<9} apolog  q{suffix}")
+    print("  " + "-" * 62)
     for sc in scenarios:
-        ok, fail, apol, q = run_one(sc, api_key, assistant_id, verbose)
-        passed += ok
-        tot_apol += apol
-        tot_q += q
-        mark = "PASS" if ok else "FAIL"
-        line = f"  {sc['name']:<32} {mark:<10} {apol:<6}  {q}"
-        if not ok:
-            line += f"   ← {fail}"
+        p = 0
+        apols = []
+        qs = []
+        last_fail = None
+        for _ in range(runs):
+            ok, fail, apol, q = run_one(sc, api_key, assistant_id, verbose)
+            p += ok
+            apols.append(apol)
+            qs.append(q)
+            if not ok:
+                last_fail = fail
+        total_pass += p
+        tot_apol += sum(apols)
+        tot_q += sum(qs)
+        avg_apol = sum(apols) / len(apols)
+        avg_q = sum(qs) / len(qs)
+        line = f"  {sc['name']:<32} {f'{p}/{runs}':<9} {avg_apol:<6.1f}  {avg_q:.1f}"
+        if p < runs and last_fail:
+            line += f"   ← {last_fail}"
         print(line)
-    n = len(scenarios)
-    print("  " + "-" * 58)
-    print(f"  SCORE: {passed}/{n} passed   |   apologies total {tot_apol}   |   questions total {tot_q}")
-    return {"passed": passed, "total": n, "apologies": tot_apol, "questions": tot_q}
+    n = len(scenarios) * runs
+    pct = (total_pass / n * 100) if n else 0
+    print("  " + "-" * 62)
+    print(f"  SCORE: {total_pass}/{n} checks ({pct:.0f}%)   |   apologies {tot_apol}   |   questions {tot_q}")
+    return {"passed": total_pass, "total": n, "apologies": tot_apol, "questions": tot_q, "pct": pct}
 
 
 def main():
@@ -269,38 +282,54 @@ def main():
 
     args = sys.argv[1:]
 
+    # Pull out `--repeat N` (run each scenario N times → report a pass RATE,
+    # which smooths out LLM run-to-run variance for a fair model comparison).
+    runs = 1
+    if "--repeat" in args:
+        i = args.index("--repeat")
+        if i + 1 < len(args) and args[i + 1].isdigit():
+            runs = int(args[i + 1])
+            args = args[:i] + args[i + 2:]
+        else:
+            sys.exit("Usage: --repeat N  (N = runs per scenario)")
+
     # --- compare mode ---
     if args and args[0] == "--compare":
         models = args[1:]
         if not models:
-            sys.exit("Usage: python evals.py --compare gpt-4o-mini gpt-4o [...]")
+            sys.exit("Usage: python evals.py --compare gpt-4o-mini gpt-4o [--repeat N]")
         webhook_url = _require("WEBHOOK_URL")
-        provider = os.environ.get("LLM_PROVIDER", "openai")
+        default_provider = os.environ.get("LLM_PROVIDER", "openai")
+        # Each spec is "model" (uses default provider) or "provider:model" so you
+        # can mix providers, e.g. openai:gpt-4o-mini anthropic:claude-haiku-4-5
         results = {}
-        for model in models:
+        for spec in models:
+            provider, model = spec.split(":", 1) if ":" in spec else (default_provider, spec)
             print("\n" + "=" * 62)
-            print(f"  MODEL: {provider}/{model}")
+            print(f"  MODEL: {provider}/{model}   (x{runs} per scenario)")
             print("=" * 62)
             provision_model(api_key, assistant_id, webhook_url, provider, model)
-            results[model] = run_suite(api_key, assistant_id, SUITE)
+            results[spec] = run_suite(api_key, assistant_id, SUITE, runs=runs)
 
         print("\n" + "=" * 62)
         print("  COMPARISON")
         print("=" * 62)
-        print(f"  {'model':<24} {'score':<10} apologies  questions")
-        for model, r in results.items():
-            print(f"  {model:<24} {r['passed']}/{r['total']:<8} {r['apologies']:<10} {r['questions']}")
+        print(f"  {'model':<28} {'pass rate':<12} apologies  questions")
+        for spec, r in results.items():
+            rate = f"{r['passed']}/{r['total']} ({r['pct']:.0f}%)"
+            print(f"  {spec:<28} {rate:<12} {r['apologies']:<10} {r['questions']}")
         # restore the model configured in .env
         restore = os.environ.get("MODEL", "gpt-4o-mini")
-        provision_model(api_key, assistant_id, webhook_url, provider, restore)
-        print(f"\n  Restored assistant to {provider}/{restore} (from .env).")
+        restore_provider = os.environ.get("LLM_PROVIDER", "openai")
+        provision_model(api_key, assistant_id, webhook_url, restore_provider, restore)
+        print(f"\n  Restored assistant to {restore_provider}/{restore} (from .env).")
         return
 
     # --- single mode: score the current assistant ---
-    wanted = [a.lower() for a in args]
+    wanted = [a.lower() for a in args if a not in ("-v", "--verbose")]
     scenarios = [s for s in SUITE if not wanted or any(w in s["name"] for w in wanted)]
     print("  (scoring the CURRENT assistant — use --compare to A/B models)")
-    run_suite(api_key, assistant_id, scenarios, verbose=("-v" in args or "--verbose" in args))
+    run_suite(api_key, assistant_id, scenarios, verbose=("-v" in args or "--verbose" in args), runs=runs)
 
 
 if __name__ == "__main__":
