@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets & local config
+.env
+
+# Generated mock database (reseeds itself)
+summit_air.db
+
+# OS
+.DS_Store
