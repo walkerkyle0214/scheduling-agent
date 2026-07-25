@@ -139,7 +139,8 @@ def build_tools(webhook_url: str) -> list[dict]:
     ]
 
 
-def build_payload(system_prompt: str, webhook_url: str) -> dict:
+def build_payload(system_prompt: str, webhook_url: str,
+                  provider: str = "openai", model: str = "gpt-4o-mini") -> dict:
     return {
         "name": "Summit Air Scheduling Agent",
         # Fixed opening line, spoken instantly and deterministically — this
@@ -149,8 +150,8 @@ def build_payload(system_prompt: str, webhook_url: str) -> dict:
         "firstMessageMode": "assistant-speaks-first",
         "firstMessage": "Thanks for calling Summit Air, this is Daniel. What's going on with your heating or cooling today?",
         "model": {
-            "provider": "openai",
-            "model": "gpt-4o-mini",
+            "provider": provider,
+            "model": model,
             "temperature": 0.4,
             "messages": [{"role": "system", "content": system_prompt}],
             "tools": build_tools(webhook_url),
@@ -172,8 +173,11 @@ def main() -> None:
     webhook_url = _require("WEBHOOK_URL")
     assistant_id = os.environ.get("VAPI_ASSISTANT_ID")
 
+    provider = os.environ.get("LLM_PROVIDER", "openai")
+    model = os.environ.get("MODEL", "gpt-4o-mini")
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8") + CALLER_CONTEXT
-    payload = build_payload(system_prompt, webhook_url)
+    payload = build_payload(system_prompt, webhook_url, provider, model)
+    print(f"Model: {provider}/{model}")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     if assistant_id:
