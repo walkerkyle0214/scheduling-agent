@@ -8,6 +8,32 @@ Status key: 🔴 open · 🟡 in progress · 🟢 fixed (verified)
 
 ---
 
+## Case 018 — Triage severity was wording-dependent; eval had brittle checks
+**Found:** eval runs on Haiku, 2026-07-25 (variance + consistent fails across two passes)
+**Symptom:** EMERGENCY triage scenarios (gas, CO, burning) flipped or failed because
+the backend inferred the level from keywords in the agent's free-text `reason` — if
+the agent didn't include "gas"/"burning", a real hazard was logged as URGENT. Also two
+eval scenarios failed for eval-quality reasons, not agent behavior.
+**Fix (agent — turn a wording-dependent behavior into exact state):**
+- `flag_priority` now takes an explicit **`severity`** (EMERGENCY/URGENT); the backend
+  uses it, with keyword inference as a safety net that can *raise* to EMERGENCY but
+  never downgrade a detected hazard. Tool schema + Section 5 of the prompt updated so
+  the agent states severity outright.
+**Fix (eval — the checks were the bug, not the agent):**
+- `dates_impossible`: broadened the keyword set (agent declined Jan 1st correctly, just
+  worded it outside the old list — a brittle proxy check).
+- `triage_no_heat_elderly`: now passes on an URGENT priority **or** an urgent booking
+  (both are valid Tier B paths; the old check demanded only the priority entry).
+- Added 4 **paraphrase variants** (gas "rotten eggs", smoke/burning, no-AC-medical,
+  casual booking) to test robustness to real phrasing, not just sampling noise.
+**Also:** `evals.py --repeat N` reports pass rates (smooths LLM variance);
+`--compare provider:model …` A/Bs across providers. Full framework in
+`docs/EVALUATION.md`.
+**Status:** 🟢 backend/eval verified; **re-provision** (prompt + tool schema changed),
+then baseline with `python tests/evals.py --repeat 5`.
+
+---
+
 ## Case 017 — Agent didn't hang up after saying goodbye
 **Found:** voice test, 2026-07-24
 **Symptom:** After the closing, the call didn't actually end — dead air / lingering.

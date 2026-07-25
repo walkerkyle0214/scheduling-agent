@@ -129,6 +129,7 @@ def build_tools(webhook_url: str) -> list[dict]:
                         "address": {"type": "string"},
                         "property_type": {"type": "string", "enum": ["residential", "commercial"]},
                         "reason": {"type": "string", "description": "Short reason, e.g. 'No heat, elderly resident' or 'Gas smell'."},
+                        "severity": {"type": "string", "enum": ["EMERGENCY", "URGENT"], "description": "EMERGENCY for a hazard / life-safety situation (gas, carbon monoxide, smoke, burning or electrical smell, any immediate danger). URGENT for a pressing but non-hazardous situation (no heat/AC with a vulnerable person, a commercial site fully down)."},
                         "details": {"type": "string", "description": "Any extra context the caller gave."},
                     },
                     "required": ["reason"],

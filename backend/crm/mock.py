@@ -275,11 +275,18 @@ class MockCRM(CRMBackend):
         details = args.get("details") or ""
         property_type = (args.get("property_type") or "residential").lower()
 
+        # Prefer the severity the agent states outright; fall back to keyword
+        # inference. Keyword hazards force EMERGENCY either way — a stated
+        # severity can raise the level but never downgrade a detected hazard.
+        stated = str(args.get("severity") or args.get("level") or args.get("tier") or "").lower()
         blob = (reason + " " + details).lower()
-        is_safety = any(w in blob for w in ("gas", "carbon monoxide", "co detector", "smoke", "burning"))
+        keyword_safety = any(w in blob for w in (
+            "gas", "carbon monoxide", "co detector", "co alarm", "smoke",
+            "burning", "electrical", "spark", "fire"))
+        is_emergency = keyword_safety or stated in ("emergency", "c", "tier c", "tier_c", "hazard")
 
         priority_id = db.new_id("PRI")
-        level = "EMERGENCY" if is_safety else "URGENT"
+        level = "EMERGENCY" if is_emergency else "URGENT"
         conn = db.get_conn()
         try:
             conn.execute(
@@ -292,7 +299,7 @@ class MockCRM(CRMBackend):
         finally:
             conn.close()
 
-        if is_safety:
+        if is_emergency:
             msg = ("Flagged as EMERGENCY and pushed to the top of dispatch. "
                    "Caller should be advised on safety steps first.")
         else:
