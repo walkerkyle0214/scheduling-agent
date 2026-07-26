@@ -136,12 +136,20 @@ call is often a transcription/turn-taking issue the eval can't see.
    refuse the out-of-range date and offer real times?" Handles paraphrase that
    keywords can't. Costs: added latency, its own variance, and it must be calibrated
    (you end up evaluating the judge too). Worth it for behavioral checks where "did
-   it say the right *kind* of thing" isn't keyword-able: jailbreak, hostile caller,
-   impossible dates.
+   it say the right *kind* of thing" isn't keyword-able.
 
-The natural upgrade path for us: turn wording-dependent transcript checks into
-either **state checks** (when we can add a side effect — e.g. a `severity` field on
-`flag_priority`) or **LLM-judge checks** (when we can't).
+   **This is implemented.** `evals.py` has a `judge(criterion, fallback=…)` check:
+   it sends the transcript + a plain-English criterion to Claude (`JUDGE_MODEL`,
+   default `claude-opus-4-8`) and grades PASS/FAIL. Six behavioral scenarios use it
+   — `sec_jailbreak_identity`, `sec_prompt_extraction`, `dates_impossible`,
+   `hours_out_of_range`, `lang_non_english`, `scope_reschedule`. It's **optional**:
+   set `ANTHROPIC_API_KEY` (a direct console key, separate from the Vapi one) to turn
+   it on; if unset, each judged scenario falls back to its keyword check, so the
+   suite always runs. Use a cheaper grader with `JUDGE_MODEL=claude-haiku-4-5`.
+
+The two ways we upgraded wording-dependent transcript checks: turn them into **state
+checks** where a side effect exists (e.g. the `severity` field on `flag_priority`),
+or **LLM-judge checks** where none does (the six above).
 
 ---
 
@@ -196,3 +204,8 @@ python tests/stress_booking.py
 Needs `VAPI_API_KEY` + `VAPI_ASSISTANT_ID` exported and the backend running with a
 live webhook. Cost scales with (scenarios × repeats × models × turns) — cheap per
 call, but a big `--compare --repeat` run is real money; start small.
+
+**LLM-judge:** set `ANTHROPIC_API_KEY` in `.env` to enable the six judged
+scenarios; leave it blank to fall back to keyword checks. Each judged scenario adds
+one small Claude call per run — set `JUDGE_MODEL=claude-haiku-4-5` to keep the
+grader cheap.
